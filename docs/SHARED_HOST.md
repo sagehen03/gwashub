@@ -518,7 +518,7 @@ downloads after the first 100 GB a month. For comparison, `docs/AWS_FULL.md`'s d
 
 ## Tracking it and removing it
 
-Every resource GWASHub creates in the account, except those AWS can't tag, has the tag `project=gwashub`; the stack's also have
+Every resource GWASHub creates in the account, except those CloudFormation or AWS can't tag, has the tag `project=gwashub`; the stack's also have
 `environment=broad`. Most are in the CloudFormation stack `Gwashub-broad-Shared`; a few are not:
 
 | Not in the stack | What it is |
@@ -527,6 +527,7 @@ Every resource GWASHub creates in the account, except those AWS can't tag, has t
 | The deploy bucket `gwashub-broad-deploy-<account>-us-east-1` | Made by the deploy (step 5), tagged |
 | The host itself, if it runs only GWASHub | Its instance, security group, instance role and profile, made by hand |
 | The VPC address range the Batch subnets use | Added by hand; AWS can't tag it |
+| The log group `/aws/lambda/Gwashub-broad-Shared-AWS679f53…` | Made by AWS when the stack's one Lambda function first runs; not tagged, never expires |
 | The `gwashub` MySQL database and user, the nginx block, certificate and DNS record | Made by hand |
 
 ```bash
@@ -540,7 +541,7 @@ To remove it all (**not tried yet**; it deletes data, so take what you need firs
 2. Delete the stack: `aws cloudformation delete-stack --stack-name Gwashub-broad-Shared --region us-east-1`. The host's policy and
    the API port rule go with it. Six things are **kept**: the three data buckets, the encryption key, the log group and the Cognito
    user pool (which also has deletion protection on). Each must be emptied or deleted by hand if you want it gone.
-3. Delete the image repositories and the deploy bucket.
+3. Delete the image repositories, the deploy bucket and the Lambda log group.
 4. Disassociate the VPC address range, once its subnets are gone with the stack.
 5. Drop the MySQL database and user; remove the nginx block, the certificate and the DNS record.
 6. Terminate the host if it runs only GWASHub, and delete its security group, role and profile.
