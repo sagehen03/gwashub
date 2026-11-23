@@ -75,5 +75,10 @@ class SharedHostConfig:
         if not self.availability_zones or len(self.availability_zones) != len(self.batch_subnet_cidrs):
             raise ValueError("availability_zones and batch_subnet_cidrs need one entry each per Batch subnet")
 
+    @property
+    def deploy_bucket(self) -> str:
+        """The bucket the stack's template goes up through (made by devtools/shared_host_deploy.sh); no CDK bootstrap."""
+        return f"gwashub-{self.name}-deploy-{self.account}-{self.region}"
+
 
 SHARED_HOSTS: dict[str, SharedHostConfig] = {}

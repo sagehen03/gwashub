@@ -163,9 +163,8 @@ echo "== 5. infrastructure: Gwashub-$ENV_NAME-Shared"
 for svc in ecs.amazonaws.com batch.amazonaws.com spot.amazonaws.com; do
   aws iam create-service-linked-role --aws-service-name "$svc" >/dev/null 2>&1 || true
 done
+ensure_deploy_bucket
 cd infra
-aws cloudformation describe-stacks --stack-name CDKToolkit >/dev/null 2>&1 || \
-  npx --yes aws-cdk@2 bootstrap -c env="$ENV_NAME" -c pipeline_images="$PIPELINE_IMAGES" "aws://$ACCOUNT/$AWS_REGION"
 npx --yes aws-cdk@2 deploy "Gwashub-$ENV_NAME-Shared" -c env="$ENV_NAME" -c pipeline_images="$PIPELINE_IMAGES" \
   --require-approval never --outputs-file "cdk-outputs-$ENV_NAME.json"
 cd ..

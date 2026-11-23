@@ -49,3 +49,17 @@ EOF
     "(host_instance_id in infra/gwashub_infra/config.py): check GWASHUB_SSH_TARGET. Nothing was changed there."
   echo "  $GWASHUB_SSH_TARGET is $want, the host in $ENV_NAME's configuration"
 }
+
+# ensure_deploy_bucket: the bucket the stack's template and its one small function go up through, made private the first time.
+# With it the stack deploys on the operator's own AWS credentials, so the account needs no `cdk bootstrap`, which would leave
+# standing roles (one an administrator) in an account GWASHub shares. Stops if the name belongs to another account.
+ensure_deploy_bucket() {
+  local bucket account
+  bucket=$(cfg deploy_bucket)
+  account=$(cfg account)
+  aws s3api head-bucket --bucket "$bucket" --expected-bucket-owner "$account" >/dev/null 2>&1 && return 0
+  aws s3 mb "s3://$bucket" --region "$AWS_REGION"
+  aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+  aws s3api put-bucket-tagging --bucket "$bucket" --tagging "TagSet=[{Key=project,Value=gwashub},{Key=environment,Value=$ENV_NAME}]"
+}

@@ -288,7 +288,7 @@ git status --porcelain      # must print nothing
 | 2 | The host | SSH and `sudo -n` work; the machine is the configured host (its instance ID, from IMDSv2, is `host_instance_id`); `/opt/gwashub/releases` exists (the setup ran) |
 | 3 | Website | `npx nuxi generate`; fails unless `index.html`, `200.html` and `paused.html` were built |
 | 4 | Pipeline images | Logs in to ECR, builds and pushes each image from `pipeline/images/` not already in ECR at this tag, and records its digest |
-| 5 | Infrastructure | `cdk deploy Gwashub-broad-Shared`; saves the outputs in `infra/cdk-outputs-broad.json` (git-ignored). Creates the service-linked roles ECS, Batch and Spot need (a no-op once they exist), and bootstraps CDK if the account has no `CDKToolkit` stack |
+| 5 | Infrastructure | `cdk deploy Gwashub-broad-Shared`; saves the outputs in `infra/cdk-outputs-broad.json` (git-ignored). Creates the service-linked roles ECS, Batch and Spot need (a no-op once they exist). The stack deploys with your own AWS credentials through one private bucket, `gwashub-broad-deploy-<account>-us-east-1`, made the first time: the account needs no `cdk bootstrap`, and gets none of its roles |
 | 6 | The release | `git archive HEAD` and the built site, over SSH, into `/opt/gwashub/releases/<tag>`; a virtualenv from `images/app/requirements.txt` |
 | 7 | The env file | `shared_host.py render-env` (reads the stack outputs and the three secrets); written to `/etc/gwashub/env` over stdin |
 | 8 | The units | `shared_host.py render-unit` for `api` and `worker`; `daemon-reload` and `enable` |

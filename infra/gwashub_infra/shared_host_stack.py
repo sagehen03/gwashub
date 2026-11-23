@@ -25,7 +25,9 @@ class SharedHostStack(cdk.Stack):
     def __init__(self, scope: Construct, id: str, *, cfg: SharedHostConfig, pipeline_images: dict, **kwargs):
         """pipeline_images: {"gwashub/base": {"digest": "sha256:...", "platform": "linux/arm64"}, ...} (or just the
         digest), the images pushed by the deploy script to ECR repositories gwashub-images/<owner>/<image>."""
-        super().__init__(scope, id, **kwargs)
+        # Deployed with the operator's own AWS credentials, through one plain bucket. A CDK bootstrap would leave standing
+        # roles, one of them an administrator, in an account GWASHub only shares.
+        super().__init__(scope, id, synthesizer=cdk.CliCredentialsStackSynthesizer(file_assets_bucket_name=cfg.deploy_bucket), **kwargs)
         n = cfg.name
         files = parts.file_store(self, cfg)
         log_group = logs.LogGroup(self, "Logs", log_group_name=f"/gwashub/{n}/app", retention=parts.retention(cfg.log_days),

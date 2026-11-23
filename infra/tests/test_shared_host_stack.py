@@ -301,6 +301,21 @@ def test_app_builds_only_the_shared_stack_for_a_shared_host(monkeypatch, tmp_pat
     assert set(template["Outputs"]) == OUTPUT_KEYS
 
 
+def test_deploys_without_a_bootstrapped_account(monkeypatch, tmp_path):
+    """The deployer's own credentials and one bucket: no CDK bootstrap, and none of the roles it leaves in the account."""
+    monkeypatch.setitem(config.SHARED_HOSTS, CFG.name, CFG)
+    out = run_app(monkeypatch, tmp_path, {"env": CFG.name, "pipeline_images": PIPELINE_IMAGES})
+    stack = json.loads((out / "manifest.json").read_text())["artifacts"]["Gwashub-example-Shared"]["properties"]
+    assert CFG.deploy_bucket == "gwashub-example-deploy-111111111111-us-east-1"
+    assert stack["stackTemplateAssetObjectUrl"].startswith(f"s3://{CFG.deploy_bucket}/")
+    assert not {"assumeRoleArn", "cloudFormationExecutionRoleArn", "lookupRole", "requiresBootstrapStackVersion"} & set(stack)
+    text = (out / "Gwashub-example-Shared.template.json").read_text() + (out / "Gwashub-example-Shared.assets.json").read_text()
+    assert "hnb659fds" not in text and "BootstrapVersion" not in text  # nothing from a bootstrap: its bucket, roles or version
+    files = json.loads((out / "Gwashub-example-Shared.assets.json").read_text())["files"].values()
+    destinations = [d for f in files for d in f["destinations"].values()]
+    assert destinations and all(d["bucketName"] == CFG.deploy_bucket and "assumeRoleArn" not in d for d in destinations)
+
+
 def test_app_needs_the_pipeline_images_for_a_shared_host(monkeypatch, tmp_path):
     monkeypatch.setitem(config.SHARED_HOSTS, CFG.name, CFG)
     with pytest.raises(SystemExit) as e:

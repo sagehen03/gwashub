@@ -694,6 +694,73 @@ def test_scripts_check_the_host_identity(script):
     assert len(calls) == (2 if script == "shared_host_deploy.sh" else 1)  # deploy: the deploy and the rollback
 
 
+# ---------- the bucket the stack deploys through (devtools/lib/shared_host_common.sh) ----------
+
+FAKE_AWS = """#!/usr/bin/env bash
+# Records each call. head-bucket succeeds only if FAKE_BUCKET_EXISTS is set; `s3 mb` fails if FAKE_MB_FAILS is set.
+echo "$*" >> "$AWS_CALLS"
+case "$1 $2" in
+  "s3api head-bucket") [ -n "${FAKE_BUCKET_EXISTS:-}" ] || { echo "An error occurred (404)" >&2; exit 254; } ;;
+  "s3 mb") [ -z "${FAKE_MB_FAILS:-}" ] || { echo "make_bucket failed: BucketAlreadyExists" >&2; exit 1; } ;;
+esac
+"""
+
+FAKE_PYTHON_BUCKET = """#!/usr/bin/env bash
+case "$4" in
+  region) echo us-east-1 ;;
+  account) echo 111111111111 ;;
+  deploy_bucket) echo gwashub-example-deploy-111111111111-us-east-1 ;;
+  *) echo "unexpected field $4" >&2; exit 1 ;;
+esac
+"""
+
+
+def ensure_deploy_bucket(tmp_path: Path, **env: str) -> tuple[subprocess.CompletedProcess, list[str]]:
+    bin_dir, work, calls = tmp_path / "bin", tmp_path / "work", tmp_path / "calls"
+    for path, text in ((bin_dir / "aws", FAKE_AWS), (work / ".venv" / "bin" / "python", FAKE_PYTHON_BUCKET)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        path.chmod(0o755)
+    script = f"set -euo pipefail; ENV_NAME=example; source {COMMON}; ensure_deploy_bucket; echo ready"
+    out = subprocess.run(["bash", "-c", script], cwd=work, capture_output=True, text=True, env={
+        **os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GWASHUB_SSH_TARGET": "ec2-user@host.example",
+        "AWS_CALLS": str(calls), **env})
+    return out, calls.read_text().splitlines() if calls.exists() else []
+
+
+BUCKET = "gwashub-example-deploy-111111111111-us-east-1"
+
+
+def test_deploy_bucket_is_made_private_the_first_time(tmp_path):
+    out, calls = ensure_deploy_bucket(tmp_path)
+    assert out.returncode == 0 and out.stdout.endswith("ready\n"), out.stderr
+    assert [" ".join(c.split()[:2]) for c in calls] == ["s3api head-bucket", "s3 mb", "s3api put-public-access-block", "s3api put-bucket-tagging"]
+    assert all(BUCKET in c for c in calls)
+    assert "--expected-bucket-owner 111111111111" in calls[0] and "--region us-east-1" in calls[1]
+    block = calls[2]
+    assert all(f"{k}=true" in block for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"))
+
+
+def test_deploy_bucket_is_left_alone_once_it_exists(tmp_path):
+    out, calls = ensure_deploy_bucket(tmp_path, FAKE_BUCKET_EXISTS="1")
+    assert out.returncode == 0, out.stderr
+    assert [" ".join(c.split()[:2]) for c in calls] == ["s3api head-bucket"]
+
+
+def test_deploy_stops_if_the_bucket_cannot_be_made(tmp_path):
+    """The name belongs to another account, say: never upload the stack there."""
+    out, calls = ensure_deploy_bucket(tmp_path, FAKE_MB_FAILS="1")
+    assert out.returncode != 0 and "ready" not in out.stdout
+    assert calls[-1].startswith("s3 mb")
+
+
+def test_shared_host_deploy_never_bootstraps_the_account():
+    lines = [line for line in DEPLOY.read_text().splitlines() if not line.lstrip().startswith("#")]
+    assert not [line for line in lines if "bootstrap" in line or "CDKToolkit" in line]
+    text = "\n".join(lines)
+    assert text.index("\nensure_deploy_bucket\n") < text.index("aws-cdk@2 deploy")
+
+
 # ---------- the command line ----------
 
 def cli(*args: str, stdin: str = "") -> subprocess.CompletedProcess:
