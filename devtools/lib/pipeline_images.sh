@@ -10,7 +10,8 @@ LIFECYCLE='{"rules": [
   {"rulePriority": 2, "description": "keep the 5 newest", "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 5}, "action": {"type": "expire"}}]}'
 ensure_repo() {
   aws ecr describe-repositories --repository-names "$1" >/dev/null 2>&1 || \
-    aws ecr create-repository --repository-name "$1" --image-scanning-configuration scanOnPush=true --image-tag-mutability IMMUTABLE >/dev/null
+    aws ecr create-repository --repository-name "$1" --image-scanning-configuration scanOnPush=true --image-tag-mutability IMMUTABLE \
+      --tags Key=project,Value=gwashub >/dev/null  # the tag every GWASHub resource has: how to find and remove them
   aws ecr put-lifecycle-policy --repository-name "$1" --lifecycle-policy-text "$LIFECYCLE" >/dev/null
 }
 

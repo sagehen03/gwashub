@@ -516,6 +516,37 @@ the Broad's and cost nothing extra here. Per use: S3 at about $0.023 a GB a mont
 $0.40 for a full-size QC run and $0.10 to $0.50 for a meta-analysis at historical Spot prices), public IPs for Batch machines while they run, and
 downloads after the first 100 GB a month. For comparison, `docs/AWS_FULL.md`'s dev deployment measured about $120 a month fixed.
 
+## Tracking it and removing it
+
+Every resource GWASHub creates in the account, except those AWS can't tag, has the tag `project=gwashub`; the stack's also have
+`environment=broad`. Most are in the CloudFormation stack `Gwashub-broad-Shared`; a few are not:
+
+| Not in the stack | What it is |
+|---|---|
+| The image repositories `gwashub-images/*` | Made by the deploy (step 4), tagged |
+| The deploy bucket `gwashub-broad-deploy-<account>-us-east-1` | Made by the deploy (step 5), tagged |
+| The host itself, if it runs only GWASHub | Its instance, security group, instance role and profile, made by hand |
+| The VPC address range the Batch subnets use | Added by hand; AWS can't tag it |
+| The `gwashub` MySQL database and user, the nginx block, certificate and DNS record | Made by hand |
+
+```bash
+aws cloudformation list-stack-resources --stack-name Gwashub-broad-Shared --region us-east-1
+aws resourcegroupstaggingapi get-resources --tag-filters Key=project,Values=gwashub --region us-east-1
+```
+
+To remove it all (**not tried yet**; it deletes data, so take what you need first):
+
+1. Stop the services: `sudo systemctl disable --now gwashub-api gwashub-worker` on the host.
+2. Delete the stack: `aws cloudformation delete-stack --stack-name Gwashub-broad-Shared --region us-east-1`. The host's policy and
+   the API port rule go with it. Six things are **kept**: the three data buckets, the encryption key, the log group and the Cognito
+   user pool (which also has deletion protection on). Each must be emptied or deleted by hand if you want it gone.
+3. Delete the image repositories and the deploy bucket.
+4. Disassociate the VPC address range, once its subnets are gone with the stack.
+5. Drop the MySQL database and user; remove the nginx block, the certificate and the DNS record.
+6. Terminate the host if it runs only GWASHub, and delete its security group, role and profile.
+
+The service-linked roles for ECS, Batch and Spot are shared with anything else in the account that uses them: leave them.
+
 ## Changing things
 
 | To change | Edit | Then |

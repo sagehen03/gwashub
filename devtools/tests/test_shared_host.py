@@ -761,6 +761,35 @@ def test_shared_host_deploy_never_bootstraps_the_account():
     assert text.index("\nensure_deploy_bucket\n") < text.index("aws-cdk@2 deploy")
 
 
+# ---------- the image repositories (devtools/lib/pipeline_images.sh) ----------
+
+PIPELINE_IMAGES_SH = ROOT / "devtools" / "lib" / "pipeline_images.sh"
+
+
+def ensure_repo(tmp_path: Path, **env: str) -> list[str]:
+    bin_dir, calls = tmp_path / "bin", tmp_path / "calls"
+    fake = FAKE_AWS.replace('"s3api head-bucket") [ -n "${FAKE_BUCKET_EXISTS:-}" ]', '"ecr describe-repositories") [ -n "${FAKE_REPO_EXISTS:-}" ]')
+    (bin_dir / "aws").parent.mkdir(parents=True, exist_ok=True)
+    (bin_dir / "aws").write_text(fake)
+    (bin_dir / "aws").chmod(0o755)
+    out = subprocess.run(["bash", "-c", f"set -euo pipefail; source {PIPELINE_IMAGES_SH}; ensure_repo gwashub-images/gwashub/base"],
+                         capture_output=True, text=True, env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                                                             "AWS_CALLS": str(calls), **env})
+    assert out.returncode == 0, out.stderr
+    return calls.read_text().splitlines()
+
+
+def test_image_repositories_are_tagged_when_made(tmp_path):
+    calls = ensure_repo(tmp_path)
+    made = [c for c in calls if c.startswith("ecr create-repository")]
+    assert len(made) == 1 and "--tags Key=project,Value=gwashub" in made[0]
+
+
+def test_image_repositories_that_exist_are_left_alone(tmp_path):
+    calls = ensure_repo(tmp_path, FAKE_REPO_EXISTS="1")
+    assert not [c for c in calls if "create-repository" in c]
+
+
 # ---------- the command line ----------
 
 def cli(*args: str, stdin: str = "") -> subprocess.CompletedProcess:
